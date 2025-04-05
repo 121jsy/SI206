@@ -40,7 +40,7 @@ import datetime
 # import api_keys
 import pandas as pd   
 
-from config import get_news_api_key
+from config import get_news_api_auth_header
 from pytrends.request import TrendReq
 
 
@@ -63,7 +63,9 @@ def get_trend_data(request_param):
     RETURNS: 
         
     '''
+
     pass
+    
 
 
 def get_news_data_everything(request_param):
@@ -91,7 +93,7 @@ def get_news_data_everything(request_param):
 
 
     base_url = "https://newsapi.org/v2/everything"
-    headers = get_news_api_key()
+    headers = get_news_api_auth_header()
 
     response = requests.get(base_url, headers=headers, params=request_param)
 
@@ -239,7 +241,17 @@ def update_newsapi_database(api_name, endpoint, request_param, data):
 
 
 def main():
-    # newsapi_key = get_news_api_key()
+
+    pytrends = TrendReq(hl='en-US', tz=360)
+    # pytrends = TrendReq(retries=3)
+
+    # pytrends.build_payload(kw_list=['Korea'], timeframe=['2025-01-01 2025-04-01'])
+    df = pytrends.top_charts(date=2024, hl='en-US', tz=360, geo='US')
+
+    print(df.to_string())
+
+
+    # newsapi_key = get_news_api_auth_header()
     # pytrends_key = get_pytrends_api_key()
     # ========================================================================================
     print("===================================================================================")
@@ -269,13 +281,15 @@ def main():
 
         if option == "1":
             print("Option 1: News coverage on trending topics by news sources\n")
-            # trending_topics = get_trend_data(pytrends_key, "trending_searches")
+            trending_topics = get_trend_data("trending_searches")
             # param = {
-            #     "country": "us",
+            #     "language": "en",
             #     "category": "general",
-            #     "sources": "cnn,bbc-news,fox-news",
+            #     "from": "2025-01-01",
+            #     "to": "2025-04-01",
             #     "apiKey": newsapi_key
             # }
+            # get_news_data_everything(param)
 
         elif option == "2":
             print("Option 2: Trend vs. article frequency over time for a keyword\n")
