@@ -15,6 +15,7 @@ In anticipation of high sales, Tesla even modified its Austin Gigafactory so it 
 “They haven’t sold a lot and it’s unlikely in this case that overseas markets can save them, even China that’s been huge for Tesla cars,” Mercer said. “It’s really just for this market.
 """
 
+
 text2 = """
 S stock markets see worst day since Covid pandemic after investors shaken by Trump tariffs
 All three major US index funds close down as Apple and Nvidia, two of US’s largest companies, lose combined $470bn
