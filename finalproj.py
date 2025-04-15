@@ -26,12 +26,15 @@ Visualization Tools:
     - Plotly
     - Pandas
 '''
+import praw
 
 import os
 import sqlite3
 import json
 import pandas as pd
 import requests
+from datetime import datetime
+import time
 
 import kagglehub
 from kagglehub import KaggleDatasetAdapter
@@ -99,82 +102,231 @@ def update_database(data=None, filename=None):
     pass
 
 
-def search_reddit_data():
-    # TODO: Decide whether to use Reddit API or PRAW, and implement the search function
-    # Also consider how to store the data into database: each music gets mention frequency 
-    # data or store them intoseparate table
-    pass
+# def search_reddit_data():
+#     # TODO: Decide whether to use Reddit API or PRAW, and implement the search function
+#     # Also consider how to store the data into database: each music gets mention frequency 
+#     # data or store them intoseparate table
+#     reddit = praw.Reddit(
+#     client_id='FNTfrSNPyKbWXIHpxfNP1g',
+#     client_secret='ky7CM9gWtdnBQJNesagc_dnfoBA6Yg',
+#     user_agent='si206:v1.2.3 (by u/Grand_Compote2026)' )
+
+#     # print(reddit.read_only)
+#     # for submission in reddit.subreddit("music").hot(limit=10):
+#     #     print(submission.title)
+
+#     # subreddit = reddit.subreddit("music")
+#     # keyword = "Sabrina Carpenter"
+#     # count = 0
+#     # for submission in subreddit.new(limit=100):  # or .hot/.top/.search etc.
+#     #     if keyword.lower() in submission.title.lower() or keyword.lower() in submission.selftext.lower():
+#     #         count += 1
+#     # print(f"'{keyword}' mentioned in {count} recent posts on r/music")
+
+#     # return count
+#     subreddit = "music"
+#     keyword = "Taylor Swift"
+#     start_date = "2024-12-01"
+#     end_date = "2025-04-01"
+#     subreddit = reddit.subreddit("music")
+#     start_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
+#     end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
+
+#     count = 0
+#     # for submission in subreddit.hot(time_filter="all"):
+#     #     post_ts = int(submission.created_utc)
+#     #     # if start_ts <= post_ts <= end_ts:
+#     #     title = submission.title.lower()
+#     #     body = submission.selftext.lower()
+#     #     if keyword.lower() in title or keyword.lower() in body:
+#     #         count += 1
+#     #         print(submission.title)
+#     # print(f"Found {count} posts mentioning '{keyword}' in r/{subreddit} between {start_date} and {end_date}.")
+
+#     count = 0
+#     keyword = "sabrina carpenter"
+#     for submission in reddit.subreddit("Music+hiphopheads+popheads").top(time_filter="month"):
+#         if keyword.lower() in submission.title.lower() or keyword.lower() in submission.selftext.lower():
+#            count += 1
+#            print(submission.title)
+#            print(f"count : {count}")
+
+#     return count
+
+
+def search_reddit_posts(keyword, subreddits, max_posts_per_sub=400):
+    headers = {
+        "User-Agent": "KeywordTracker/1.0 by si206final"
+    }
+
+    all_results = {}
+
+    for sub in subreddits:
+        print(f"\n🔍 Searching r/{sub} for keyword: '{keyword}'...")
+        posts = []
+        after = None
+        fetched = 0
+
+        while fetched < max_posts_per_sub:
+            url = f"https://www.reddit.com/r/{sub}/search.json"
+            params = {
+                "q": keyword,
+                "restrict_sr": "on", #only search in the subreddit
+                "sort": "asc",
+                "limit": 100, #number of items to fetch
+            }
+            if after:
+                params["after"] = after
+
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code != 200:
+                print(f"Error fetching from r/{sub}: {response.status_code}")
+                break
+
+            data = response.json().get("data", {})
+            children = data.get("children", [])
+
+            if not children:
+                break
+
+            for child in children:
+                post = child["data"]
+                # Check keyword in title or text
+                
+                if keyword.lower() in (post.get("title", "").lower() + " " + post.get("selftext", "").lower()):
+                    posts.append(post)
+
+            fetched += len(children)
+            after = data.get("after") #to get more than 100 results
+            #If after is None or missing, that means: You've reached the last page of results.
+
+            if not after:
+                break
+
+            time.sleep(1)  # avoid rate-limiting
+
+        print(f"✅ Found {len(posts)} matching posts in r/{sub}")
+        all_results[sub] = posts
+
+    return all_results
+
+def filter_by_date(posts, start_date, end_date):
+    """
+    Filters posts to only include those within the date range.
+    start_date and end_date should be in 'YYYY-MM-DD' format.
+    """
+    start_ts = int(time.mktime(datetime.strptime(start_date, "%Y-%m-%d").timetuple()))
+    end_ts = int(time.mktime(datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
+
+    filtered = []
+    for post in posts:
+        post_time = post.get("created_utc")
+        if post_time and start_ts <= post_time <= end_ts:
+            filtered.append(post)
+    return filtered
+
+
+
+
+
+# def main():
+#     # ========================================================================================
+#     print("===================================================================================")
+#     print("SI 206 W25 Final Project")
+#     print("Music trend analysis with Kaggle and Reddit API")
+#     print("===================================================================================\n")
+#     # print("--------------------------------------------------------")
+#     # print("-----------------------------------------------------------------------------------\n")
+
+#     load_options = '''Dataset loading options:
+#     1: python object
+#     2: local json file\n'''
+#     print(load_options)
+
+#     load_option = input("Please select an option (1 or 2): ")
+#     print()
+#     json_object = load_kaggle_dataset(load_option)
+
+#     if json_object is not None:
+#         pass
+
+
+#     options = '''Options:
+#     1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
+#     2. Option 2: Spotify Popularity vs. Reddit Mention Frequency
+#     3. Option 3: Spotify Music's Artist vs. Reddit Mention Frequency
+#     4. Option 4: Explit Music Reddit Mention. Non-Explicit Music Reddit Mention
+#     5. Option 5: ??? Reddit Sentiment ??? (EC using additional API, e.g. TextBlob)
+#     6. Option 6: ???
+#     7. Exit\n'''
+    
+#     print(options)
+
+#     option = 0
+
+#     while option != "7":
+#         # get user input
+#         option = input("Please select an option (1-7): ")
+#         print()
+
+#         if option == "1":
+#             print("Option 1: Top Charts \n")
+#             keyword = input("Keyword/phrase to search for: ")
+#             # param = {
+#             #     "language": "en",
+#             #     "category": "general",
+#             #     "from": "2025-01-01",
+#             #     "to": "2025-04-01",
+#             #     "q": keyword,
+#             # }
+
+#         elif option == "2":
+#             print("Option 2: \n")
+#         elif option == "3":
+#             print("Option 3: \n")
+#         elif option == "4":
+#             print("Option 4: \n")
+#         elif option == "5":
+#             print("Option 5: \n")
+#         elif option == "6":
+#             print("Option 6: All above\n")
+#         elif option == "7":
+#             print("Exiting the program...\n")
+#             return
+#         else:
+#             print("INVALID OPTION\n")
+#             print(options)
+
+#         print("-----------------------------------------------------------------------------------\n")
 
 
 def main():
-    # ========================================================================================
-    print("===================================================================================")
-    print("SI 206 W25 Final Project")
-    print("Music trend analysis with Kaggle and Reddit API")
-    print("===================================================================================\n")
-    # print("--------------------------------------------------------")
-    # print("-----------------------------------------------------------------------------------\n")
+    subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #music relevant subreddits
+    keyword = "sza"
 
-    load_options = '''Dataset loading options:
-    1: python object
-    2: local json file\n'''
-    print(load_options)
+    results = search_reddit_posts(keyword, subreddits)
 
-    load_option = input("Please select an option (1 or 2): ")
+    total = 0
+    print("\n📊 Summary:")
+    for sub, posts in results.items():
+        print(f"r/{sub}: {len(posts)} posts")
+        total += len(posts)
+    print(f"\n🎯 Total posts with '{keyword}': {total}")
+
     print()
-    json_object = load_kaggle_dataset(load_option)
+    print('//////////Filter post date////////////')
 
-    if json_object is not None:
-        pass
-
-
-    options = '''Options:
-    1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
-    2. Option 2: Spotify Popularity vs. Reddit Mention Frequency
-    3. Option 3: Spotify Music's Artist vs. Reddit Mention Frequency
-    4. Option 4: Explit Music Reddit Mention. Non-Explicit Music Reddit Mention
-    5. Option 5: ??? Reddit Sentiment ??? (EC using additional API, e.g. TextBlob)
-    6. Option 6: ???
-    7. Exit\n'''
+    filtered_results = {}
+    filtered_count = 0
+    for sub, posts in results.items():
+        filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
+        print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
+        filtered_count += len(filtered_results[sub])
     
-    print(options)
+    print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
 
-    option = 0
 
-    while option != "7":
-        # get user input
-        option = input("Please select an option (1-7): ")
-        print()
 
-        if option == "1":
-            print("Option 1: Top Charts \n")
-            keyword = input("Keyword/phrase to search for: ")
-            # param = {
-            #     "language": "en",
-            #     "category": "general",
-            #     "from": "2025-01-01",
-            #     "to": "2025-04-01",
-            #     "q": keyword,
-            # }
-
-        elif option == "2":
-            print("Option 2: \n")
-        elif option == "3":
-            print("Option 3: \n")
-        elif option == "4":
-            print("Option 4: \n")
-        elif option == "5":
-            print("Option 5: \n")
-        elif option == "6":
-            print("Option 6: All above\n")
-        elif option == "7":
-            print("Exiting the program...\n")
-            return
-        else:
-            print("INVALID OPTION\n")
-            print(options)
-
-        print("-----------------------------------------------------------------------------------\n")
 
 if __name__ == "__main__":
     main()
