@@ -36,6 +36,8 @@ import requests
 from datetime import datetime
 import time
 
+from config import get_reddit_api_auth
+
 import kagglehub
 from kagglehub import KaggleDatasetAdapter
 
@@ -106,9 +108,12 @@ def update_database(data=None, filename=None):
 #     # TODO: Decide whether to use Reddit API or PRAW, and implement the search function
 #     # Also consider how to store the data into database: each music gets mention frequency 
 #     # data or store them intoseparate table
+#     credentials = get_reddit_api_auth()
+#     id = credentials['client_id']
+#     secret = credentials['client_secret']
 #     reddit = praw.Reddit(
-#     client_id='FNTfrSNPyKbWXIHpxfNP1g',
-#     client_secret='ky7CM9gWtdnBQJNesagc_dnfoBA6Yg',
+#     client_id=id,
+#     client_secret=secret,
 #     user_agent='si206:v1.2.3 (by u/Grand_Compote2026)' )
 
 #     # print(reddit.read_only)
