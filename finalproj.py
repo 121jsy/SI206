@@ -43,7 +43,7 @@ from kagglehub import KaggleDatasetAdapter
 
 # kagglehub.login()
 
-def load_kaggle_dataset(option="1"):
+def load_kaggle_dataset(option="1", criteria):
     '''
     Loads kaggle dataset (Top Spotify Songs in 73 Countries (Daily Updated)) using Kaggle public API.
     Saves the dataset in the current directory as a .json file, or stores it as a python object 
@@ -51,6 +51,7 @@ def load_kaggle_dataset(option="1"):
 
     ARGUMENTS:
         option (str): An optional argument that indicates the loading/saving option.
+        criteria (dict): Argument that decides what data to keep (e.g. {"country": "US", "data_start": "2025-04-01"})
 
     RETURNS:
         json_object: A dataset in json format returned with option=1. 
@@ -166,6 +167,14 @@ def search_reddit_posts(keyword, subreddits, max_posts_per_sub=400):
 
     all_results = {}
 
+    '''
+    for (all kaggle json data):
+        if (the song critera chosen == true (e.g. [song1, song2, ..., song25]))
+            
+    '''
+
+    request_count = 0
+
     for sub in subreddits:
         print(f"\n🔍 Searching r/{sub} for keyword: '{keyword}'...")
         posts = []
@@ -231,6 +240,10 @@ def filter_by_date(posts, start_date, end_date):
     return filtered
 
 
+def update_kaggle_database(json_data):
+    '''
+
+    '''
 
 
 
@@ -306,7 +319,7 @@ def filter_by_date(posts, start_date, end_date):
 
 
 def main():
-    subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #music relevant subreddits
+    subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
     keyword = "sza"
 
     results = search_reddit_posts(keyword, subreddits)
@@ -341,3 +354,21 @@ if __name__ == "__main__":
 
 
 
+'''
+1. Choose the option 
+2. Get all the data from kaggle and store it into json object
+    - Manipulate data and insert into Kaggle database (25 song each)
+3. Get all the reddit posts related to the option (~100 posts/request - repeat to get whole month's data)
+    - Count all the mentions 
+    - Insert the mention count into the json object 
+4. Insert into Reddit database 25 each time (individual counts of ~25 songs)
+
+Reference:
+Aggregating subreddits: https://www.reddit.com/r/redditdev/comments/uwfrc7/the_rate_limit_of_60_requests_per_minute_might/
+Increased Rate Limits: https://www.reddit.com/r/redditdev/comments/14nbw6g/updated_rate_limits_going_into_effect_over_the/
+    Free API access rates are as follows:
+        - 100 queries per minute per OAuth client id if you are using OAuth authentication
+        - 10 queries per minute if you are not using OAuth authentication
+PRAW Rate limit Headers: https://www.reddit.com/r/redditdev/comments/7muatr/praw_rate_limit_headers/
+
+'''
