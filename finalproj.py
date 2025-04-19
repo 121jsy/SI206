@@ -43,7 +43,7 @@ from kagglehub import KaggleDatasetAdapter
 
 # kagglehub.login()
 
-def load_kaggle_dataset(option="1", criteria):
+def load_kaggle_dataset(criteria, option="1"):
     '''
     Loads kaggle dataset (Top Spotify Songs in 73 Countries (Daily Updated)) using Kaggle public API.
     Saves the dataset in the current directory as a .json file, or stores it as a python object 
@@ -265,97 +265,93 @@ def update_kaggle_database(json_data):
 
 
 
-# def main():
-#     # ========================================================================================
-#     print("===================================================================================")
-#     print("SI 206 W25 Final Project")
-#     print("Music trend analysis with Kaggle and Reddit API")
-#     print("===================================================================================\n")
-#     # print("--------------------------------------------------------")
-#     # print("-----------------------------------------------------------------------------------\n")
-
-#     load_options = '''Dataset loading options:
-#     1: python object
-#     2: local json file\n'''
-#     print(load_options)
-
-#     load_option = input("Please select an option (1 or 2): ")
-#     print()
-
-#     options = '''Options:
-#     1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
-#     2. Option 2: Spotify Popularity vs. Reddit Mention Frequency
-#     3. Option 3: Spotify Music's Artist vs. Reddit Mention Frequency
-#     4. Option 4: Explit Music Reddit Mention. Non-Explicit Music Reddit Mention
-#     5. Option 5: ??? Reddit Sentiment ??? (EC using additional API, e.g. TextBlob)
-#     6. Option 6: ???
-#     7. Exit\n'''
-    
-#     print(options)
-
-#     option = 0
-
-#     while option != "7":
-#         # get user input
-#         option = input("Please select an option (1-7): ")
-#         print()
-
-#         if option == "1":
-#             print("Option 1: Top Charts \n")
-#             keyword = input("Keyword/phrase to search for: ")
-#             # param = {
-#             #     "language": "en",
-#             #     "category": "general",
-#             #     "from": "2025-01-01",
-#             #     "to": "2025-04-01",
-#             #     "q": keyword,
-#             # }
-#             json_object = load_kaggle_dataset(load_option)
-
-#         elif option == "2":
-#             print("Option 2: \n")
-#         elif option == "3":
-#             print("Option 3: \n")
-#         elif option == "4":
-#             print("Option 4: \n")
-#         elif option == "5":
-#             print("Option 5: \n")
-#         elif option == "6":
-#             print("Option 6: All above\n")
-#         elif option == "7":
-#             print("Exiting the program...\n")
-#             return
-#         else:
-#             print("INVALID OPTION\n")
-#             print(options)
-
-#         print("-----------------------------------------------------------------------------------\n")
-
-
 def main():
-    subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
-    keyword = "sza"
+    # ========================================================================================
+    print("===================================================================================")
+    print("SI 206 W25 Final Project")
+    print("Music trend analysis with Kaggle and Reddit API")
+    print("===================================================================================\n")
+    # print("--------------------------------------------------------")
+    # print("-----------------------------------------------------------------------------------\n")
 
-    results = search_reddit_posts(keyword, subreddits)
+    load_options = '''Dataset loading options:
+    1: python object
+    2: local json file\n'''
+    print(load_options)
 
-    total = 0
-    print("\n📊 Summary:")
-    for sub, posts in results.items():
-        print(f"r/{sub}: {len(posts)} posts")
-        total += len(posts)
-    print(f"\n🎯 Total posts with '{keyword}': {total}")
-
+    load_option = input("Please select an option (1 or 2): ")
     print()
-    print('//////////Filter post date////////////')
 
-    filtered_results = {}
-    filtered_count = 0
-    for sub, posts in results.items():
-        filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
-        print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
-        filtered_count += len(filtered_results[sub])
+    options = '''Options:
+    1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
+    2. Option 2: Spotify Popularity vs. Reddit Mention Frequency
+    3. Option 3: Spotify Music's Artist vs. Reddit Mention Frequency
+    4. Option 4: Explit Music Reddit Mention. Non-Explicit Music Reddit Mention
+    5. Option 5: ??? Reddit Sentiment ??? (EC using additional API, e.g. TextBlob)
+    6. Option 6: ???
+    7. Exit\n'''
     
-    print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
+    print(options)
+
+    option = 0
+
+    while option != "7":
+        # get user input
+        option = input("Please select an option (1-7): ")
+        print()
+
+        if option == "1":
+            print("Option 1: Top Charts \n")
+            # keyword = input("Keyword/phrase to search for: ")
+            criteria = {
+                "country": "US"
+            }
+            json_object = load_kaggle_dataset(criteria, load_option)
+
+        elif option == "2":
+            print("Option 2: \n")
+        elif option == "3":
+            print("Option 3: \n")
+        elif option == "4":
+            print("Option 4: \n")
+        elif option == "5":
+            print("Option 5: \n")
+        elif option == "6":
+            print("Option 6: All above\n")
+        elif option == "7":
+            print("Exiting the program...\n")
+            return
+        else:
+            print("INVALID OPTION\n")
+            print(options)
+
+        print("-----------------------------------------------------------------------------------\n")
+
+
+# def main():
+#     subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
+#     keyword = "sza"
+
+#     results = search_reddit_posts(keyword, subreddits)
+
+#     total = 0
+#     print("\n📊 Summary:")
+#     for sub, posts in results.items():
+#         print(f"r/{sub}: {len(posts)} posts")
+#         total += len(posts)
+#     print(f"\n🎯 Total posts with '{keyword}': {total}")
+
+#     print()
+#     print('//////////Filter post date////////////')
+
+#     filtered_results = {}
+#     filtered_count = 0
+#     for sub, posts in results.items():
+#         filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
+#         print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
+#         filtered_count += len(filtered_results[sub])
+    
+#     print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
 
 
 
