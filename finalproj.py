@@ -65,7 +65,7 @@ def load_kaggle_dataset(criteria, option="1"):
         KaggleDatasetAdapter.PANDAS,
         "asaniczka/top-spotify-songs-in-73-countries-daily-updated",
         "universal_top_spotify_songs.csv",
-        pandas_kwargs={"usecols": ["name", "artists", "daily_rank", "daily_movement", "weekly_movement", "country", "popularity"]}
+        pandas_kwargs={"usecols": ["name", "artists", "daily_rank", "daily_movement", "weekly_movement", "country", "snapshot_date", "popularity"]}
     )
 
     # Check if the dataset is loaded successfully
@@ -80,25 +80,24 @@ def load_kaggle_dataset(criteria, option="1"):
     # Filter the dataframe based on criteria
     filtered_df = df
     for criteria_key, criteria_val in criteria.items():
-        filtered_df = df.loc[(df[criteria_key] == criteria_val)]
+        filtered_df = filtered_df.loc[(filtered_df[criteria_key] == criteria_val)]
     
-    # Test
+    # print(filtered_df)
 
-
-    if df is not None:
+    if filtered_df is not None:
         # Option 1: Convert the dataset to .json (for project's purpose) format and keep as a python object
         if option == "1":
             print("Option 1 (default): Saving dataset as json format python object")
-            json_string = df.to_json(orient='records', lines=False)
+            json_string = filtered_df.to_json(orient='records', lines=False)
             json_object = json.loads(json_string)
-            
-            update_database(data=json_object)
+            # print(json_object)
+            # update_database(data=json_object)
 
-            # return json_object
+            return json_object
 
         # Option 2: Convert the dataset to .json format (for project's purpose) and save it in the current directory
         elif option == "2":
-            df.to_json(os.path.join(current_directory, 'universal_top_spotify_songs.json'), 
+            filtered_df.to_json(os.path.join(current_directory, 'universal_top_spotify_songs.json'), 
                     orient='records', 
                     lines=False)
             
@@ -176,22 +175,32 @@ def update_database(data=None, filename=None):
 #            print(f"count : {count}")
 
 #     return count
+def count_reddit_posts(json_data):
+    reddit_dict = {}
+    for music in json_data:
+        name = music["name"]
+        post_count = search_reddit_posts(name)
+        reddit_dict[name] = post_count
+    
+    return json.dumps(reddit_dict)
+            
 
 
-def search_reddit_posts(keyword, subreddits, max_posts_per_sub=400):
+
+def search_reddit_posts(keyword, max_posts_per_sub=400):
     headers = {
         "User-Agent": "KeywordTracker/1.0 by si206final"
     }
 
     all_results = {}
+    total_count = 0
 
     '''
     for (all kaggle json data):
         if (the song critera chosen == true (e.g. [song1, song2, ..., song25]))
             
     '''
-
-    request_count = 0
+    subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
 
     for sub in subreddits:
         print(f"\n🔍 Searching r/{sub} for keyword: '{keyword}'...")
@@ -204,7 +213,8 @@ def search_reddit_posts(keyword, subreddits, max_posts_per_sub=400):
             params = {
                 "q": keyword,
                 "restrict_sr": "on", #only search in the subreddit
-                "sort": "asc",
+                "sort": "top",
+                "t": "month",
                 "limit": 100, #number of items to fetch
             }
             if after:
@@ -238,9 +248,10 @@ def search_reddit_posts(keyword, subreddits, max_posts_per_sub=400):
             time.sleep(1)  # avoid rate-limiting
 
         print(f"✅ Found {len(posts)} matching posts in r/{sub}")
+        total_count += len(posts)
         all_results[sub] = posts
-
-    return all_results
+    
+    return total_count
 
 def filter_by_date(posts, start_date, end_date):
     """
@@ -304,9 +315,17 @@ def main():
             print("Option 1: Top Charts \n")
             # keyword = input("Keyword/phrase to search for: ")
             criteria = {
-                "country": "US"
+                "country": "US",
+                "snapshot_date": "2025-04-18"
             }
             json_object = load_kaggle_dataset(criteria, load_option)
+            results = count_reddit_posts(json_object)
+
+            total = 0
+            print("\n📊 Summary:")
+            for name, posts in results.items():
+                print(f"{name} with {posts} posts")
+                
 
         elif option == "2":
             print("Option 2: \n")
@@ -329,29 +348,30 @@ def main():
 
 
 # def main():
-#     subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
-#     keyword = "sza"
+    # subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
+    # keyword = "sza"
 
-#     results = search_reddit_posts(keyword, subreddits)
+    # results = count_reddit_posts(json_object)
 
-#     total = 0
-#     print("\n📊 Summary:")
-#     for sub, posts in results.items():
-#         print(f"r/{sub}: {len(posts)} posts")
-#         total += len(posts)
-#     print(f"\n🎯 Total posts with '{keyword}': {total}")
 
-#     print()
-#     print('//////////Filter post date////////////')
+    # total = 0
+    # print("\n📊 Summary:")
+    # for sub, posts in results.items():
+    #     print(f"r/{sub}: {len(posts)} posts")
+    #     total += len(posts)
+    # print(f"\n🎯 Total posts with '{keyword}': {total}")
 
-#     filtered_results = {}
-#     filtered_count = 0
-#     for sub, posts in results.items():
-#         filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
-#         print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
-#         filtered_count += len(filtered_results[sub])
+    # print()
+    # print('//////////Filter post date////////////')
+
+    # filtered_results = {}
+    # filtered_count = 0
+    # for sub, posts in results.items():
+    #     filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
+    #     print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
+    #     filtered_count += len(filtered_results[sub])
     
-#     print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
+    # print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
 
 
 
@@ -381,4 +401,12 @@ Increased Rate Limits: https://www.reddit.com/r/redditdev/comments/14nbw6g/updat
         - 10 queries per minute if you are not using OAuth authentication
 PRAW Rate limit Headers: https://www.reddit.com/r/redditdev/comments/7muatr/praw_rate_limit_headers/
 
+
+4/18
+- Successfully filtered data from Kaggle (desired column and val in column)
+    - 50 per country
+TODO: Make an option "save only" to run at least four times 
+    - Retrieve Kaggle data (maybe 2 countries?) and save it as json object
+    - Retrieve Reddit data by reading the json object 
+    - Store the data into database
 '''
