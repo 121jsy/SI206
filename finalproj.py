@@ -64,8 +64,25 @@ def load_kaggle_dataset(option="1", criteria):
     df = kagglehub.dataset_load(
         KaggleDatasetAdapter.PANDAS,
         "asaniczka/top-spotify-songs-in-73-countries-daily-updated",
-        "universal_top_spotify_songs.csv"
+        "universal_top_spotify_songs.csv",
+        pandas_kwargs={"usecols": ["name", "artists", "daily_rank", "daily_movement", "weekly_movement", "country", "popularity"]}
     )
+
+    # Check if the dataset is loaded successfully
+    if df is not None:
+        print("Dataset loaded successfully.")
+        print(df.head(10))
+        print(df.columns)
+    else:
+        print("Failed to load dataset.")
+        return None
+    
+
+    # Filter the dataframe based on criteria
+    filtered_df = df
+    for criteria_key, criteria_val in criteria.items():
+        filtered_df = df.loc[(df[criteria_key] == criteria_val)]
+
 
     if df is not None:
         # Option 1: Convert the dataset to .json (for project's purpose) format and keep as a python object
@@ -263,11 +280,6 @@ def update_kaggle_database(json_data):
 
 #     load_option = input("Please select an option (1 or 2): ")
 #     print()
-#     json_object = load_kaggle_dataset(load_option)
-
-#     if json_object is not None:
-#         pass
-
 
 #     options = '''Options:
 #     1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
@@ -297,6 +309,7 @@ def update_kaggle_database(json_data):
 #             #     "to": "2025-04-01",
 #             #     "q": keyword,
 #             # }
+#             json_object = load_kaggle_dataset(load_option)
 
 #         elif option == "2":
 #             print("Option 2: \n")
