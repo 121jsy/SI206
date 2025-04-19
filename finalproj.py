@@ -76,12 +76,13 @@ def load_kaggle_dataset(option="1", criteria):
     else:
         print("Failed to load dataset.")
         return None
-    
 
     # Filter the dataframe based on criteria
     filtered_df = df
     for criteria_key, criteria_val in criteria.items():
         filtered_df = df.loc[(df[criteria_key] == criteria_val)]
+    
+    # Test
 
 
     if df is not None:
