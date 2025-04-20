@@ -35,6 +35,7 @@ import pandas as pd
 import requests
 from datetime import datetime
 import time
+import csv
 
 import config
 
@@ -92,7 +93,7 @@ def load_kaggle_dataset(criteria, option="1"):
             json_string = filtered_df.to_json(orient='records', lines=False)
             json_object = json.loads(json_string)
 
-            create_update_kaggle_db(json_object)
+            # create_update_kaggle_db(json_object)
 
             return json_object
 
@@ -113,9 +114,9 @@ def load_kaggle_dataset(criteria, option="1"):
 id foreign key로 reference) 생성. 나중에 고려해야 될 것들: 
 1. KaggleData table의 id, music_id, daily_rank가 다 똑같음
 2. country, snapshot_date column에 있는 값들 다 똑같음
-3. snapshot_date는 아예 없애고, country는 새로운 table을 만들고 foreign key로 reference하는게 어떨지?
+3. snapshot_date는 아예 없애고, country는 새로운 table을 만들고 foreign key로 reference하는게 어떨지? -> 해결
 '''
-def create_update_kaggle_db(json_object=None):
+def create_update_kaggle_db(cur, conn, json_object=None):
     '''
     Updates the database SQLite database with the json data or filename. If the data is
     provided, it will insert the data directly into the database. If the filename is provided,
@@ -124,10 +125,6 @@ def create_update_kaggle_db(json_object=None):
     ARGUMENTS:
         json_object (dict): A dictionary containing the data retrieved with Kaggle API
     '''
-
-    path = os.path.dirname(os.path.abspath(__file__))
-    conn = sqlite3.connect(path + "/reddit.db")
-    cur = conn.cursor()
 
     # Create Music table (unique music name and id)
     cur.execute('''
@@ -140,12 +137,21 @@ def create_update_kaggle_db(json_object=None):
     cur.execute('''
         CREATE TABLE IF NOT EXISTS KaggleData (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            music_id INTEGER UNIQUE,
+            music_id INTEGER,
+            country_id INTEGER,
             daily_rank INTEGER,
-            country TEXT,
-            snapshot_date TEXT,
             popularity INTEGER,
+            FOREIGN KEY (country_id) REFERENCES Country(id),
             FOREIGN KEY (music_id) REFERENCES Music(id)
+            UNIQUE (music_id, country_id) 
+        )
+    ''') #UNIQUE (music_id, country_id) doesn't allow to insert a row with existing music_id AND country_id -> music_id는 같은데 country_id 다른 경우는 ok
+
+    #Create Country Table
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Country (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT
         )
     ''')
 
@@ -155,36 +161,45 @@ def create_update_kaggle_db(json_object=None):
         for music in json_object:
             if count >= 25:
                 conn.commit()
-                return
+                return cur, conn
+            
             name = music["name"]
+            country = music["country"]
 
             # To avoid inconsistent id, check if song exists in the Music table
             # Without this step, the "id" will be skipped (e.g. 24, 25, 51, 52, ...)
             cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
             row = cur.fetchone()
-            if row is None:
+            if row is None: #insert the data if not there
                 cur.execute("INSERT OR IGNORE INTO Music (name) VALUES (?)", (name,))
                 music_id = cur.lastrowid
             else:
                 music_id = row[0]
 
+            #Get Country id or insert the data to Country table
+            cur.execute("SELECT id FROM Country WHERE name = ?", (country,))
+            row = cur.fetchone()
+            if row is None: #insert the data if not there
+                cur.execute("INSERT OR IGNORE INTO Country (name) VALUES (?)", (country,))
+                country_id = cur.lastrowid
+            else:
+                country_id = row[0]
+            
             # Get the corresponding music_id from the Music table
-            cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
-            music_id = cur.fetchone()[0]
+            # cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
+            # music_id = cur.fetchone()[0] -->위 코드랑 겹치는 거 같음
             # Insert the rest of the data into the KaggleData table
             daily_rank = music["daily_rank"]
-            country = music["country"]
-            snapshot_date = music["snapshot_date"]
             popularity = music["popularity"]
 
-            cur.execute("INSERT OR IGNORE INTO KaggleData (music_id, daily_rank, country, snapshot_date, popularity) VALUES (?, ?, ?, ?, ?)",
-                        (music_id, daily_rank, country, snapshot_date, popularity))
+            cur.execute("INSERT OR IGNORE INTO KaggleData (music_id, country_id, daily_rank, popularity) VALUES (?, ?, ?, ?)",
+                        (music_id, country_id, daily_rank, popularity))
             
             if cur.rowcount == 1:   # rowcount property returns the affected by the previous execute()
                 count += 1          # Thus, if the affected (newly inserted) row is 1, increment count
 
     conn.commit()
-    conn.close()
+    return cur, conn
 
 
 # def search_reddit_data():
@@ -245,11 +260,40 @@ def create_update_kaggle_db(json_object=None):
 나중에 DB 다 완성되면 쓸 function
 Count reddit posts containing specific keyword in title or text by selecting data from Reddit DB
 """
-def count_reddit_posts(keyword):
-   pass
+def count_reddit_posts(cur):
+
+    # Step 1: Get all distinct Music.id and Music.name
+    cur.execute("SELECT id, name FROM Music")
+    music_rows = cur.fetchall()  # [(1, 'NOKIA'), (2, 'luther'), ...]
+
+    result = [("name", "count")]
+
+    # Step 2: For each music entry in Music table, use JOIN to count matching Reddit posts
+    for music_id, music_name in music_rows:
+        cur.execute('''
+            SELECT COUNT(Reddit.id)
+            FROM Reddit
+            JOIN Music ON Reddit.music_id = Music.id
+            WHERE Music.id = ?
+        ''', (music_id,))
+        count = cur.fetchone()[0]
+        result.append((music_name, count))
+
+    # Step 3: Sort results by count DESC (excluding header first)
+    result_body = sorted(result[1:], key=lambda x: x[1], reverse=True)
+    result_sorted = [result[0]] + result_body
+
+    # Step 4: Write to CSV
+    current_directory = os.path.dirname(os.path.abspath(__file__))
+    output_path = os.path.join(current_directory, "reddit_post_counts.csv")
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerows(result_sorted)
+
+
+   
     
 """
-새로 만듦
 Set up database in local directory and returns cursor and connection objects
 """
 def setup_db(db_name):
@@ -275,12 +319,12 @@ def create_update_reddit_db(cur, conn, post_dict):
 
     count = 0
 
-    for song, posts in post_dict.items():
-        for post in posts:
+    for music_name, posts in post_dict.items():
+        for post in posts: #list of post dictionaries
             if count >= 25:
                 conn.commit()
-                return
-            cur.execute("SELECT id FROM Music WHERE name = ?", (song,))
+                return cur, conn
+            cur.execute("SELECT id FROM Music WHERE name = ?", (music_name,))
             music_id = cur.fetchone()[0]
             cur.execute("INSERT OR IGNORE INTO Reddit (title, music_id) VALUES (?, ?)",
                         (post['title'], music_id))
@@ -288,6 +332,7 @@ def create_update_reddit_db(cur, conn, post_dict):
                 count += 1          # Thus, if the affected (newly inserted) row is 1, increment count
 
     conn.commit()
+    return cur, conn
 
 '''
 Reddit OAuth랑 PRAW사용해서 rate limit 늘리고 data retrieval efficiency 최대한 늘린 버전
@@ -295,7 +340,7 @@ Reddit OAuth랑 PRAW사용해서 rate limit 늘리고 data retrieval efficiency 
 2. group_search()에서는 노래 제목들을 받고, subreddit을 그루핑 한 후 그 그룹의 subreddit에서 검색, 그 결과를 다시 search_reddit_posts()에 넘겨줌
 3. group_search()에서 리턴된 결과를 search_reddit_posts()이 받으면 song_posts에 업데이트 하는 방식
 '''
-def search_reddit_posts_v1(json_data):
+def search_reddit_posts_v1(cur):
     """
     Retrieves Reddit posts mentioning each song in the provided JSON data.
     Groups 5 songs together per Reddit API search to be more efficient.
@@ -305,14 +350,18 @@ def search_reddit_posts_v1(json_data):
     song_posts = {}
 
     grouping_size = 5   # Number of songs to group for efficient search
-    total_songs = len(json_data)
+    cur.execute("SELECT name FROM Music")   
+    songs = [row[0] for row in cur.fetchall()] #list of music names from MUSIC table
+    total_songs = len(songs)
 
-    # Increase the start_index by +grouping_size (5) each time, until it reaches total_songs (100)
+    # Increase the start_index by +grouping_size (5) each time, until it reaches total_songs (100) --> music table에 있는 모든 노래는 61개로 들어가있음
     # Updates the grouped_songs list with 5 songs each time
     for start_index in range(0, total_songs, grouping_size):
         grouped_songs = [] # ["song_name1", "song_name2", ..., "song_name5"]
-        for i in range(start_index, start_index + grouping_size):
-            grouped_songs.append(json_data[i]["name"])
+        end_index = min(start_index + grouping_size, total_songs)  # avoid IndexError
+
+        for i in range(start_index, end_index):
+            grouped_songs.append(songs[i])
 
         group_search_results = group_search(grouped_songs)
 
@@ -553,21 +602,39 @@ def main():
                 "country": "US",
                 "snapshot_date": "2025-04-18"
             }
-            json_object = load_kaggle_dataset(criteria, load_option)
+            us_json_object = load_kaggle_dataset(criteria, load_option)
+            criteria = {
+                "country": "CA",
+                "snapshot_date": "2025-04-18"
+            }
+            ca_json_object = load_kaggle_dataset(criteria, load_option)
 
-            # 기존 방식
-            '''
-            post_dict = {} # music_name을 key로 하고 그에 해당하는 [{post1}, {post2}, {post3} ...]을 value로 하는 dict, post는 모든 subreddit에서 서치된 포스드들임
-            keyword = json_object[0]["name"] #일단 테스트용으로 첫번째 노래만 해봄
-            post_dict = search_reddit_posts(keyword, post_dict) #fetched post data
-            cur, conn = setup_db("reddit.db") #Reddit DB 만들기
-            create_update_reddit_db(cur, conn, post_dict) #Reddit DB update 
-            '''
+            json_object = us_json_object + ca_json_object # us data랑 ca data 하나로 묶어서 create_update_kaggle_db() function에 넘겨줌
 
             # 
-            cur, conn = setup_db("reddit.db") #Reddit DB 만들기
-            song_post_dict = search_reddit_posts_v1(json_object) #fetched post data
-            create_update_reddit_db(cur, conn, song_post_dict) #Reddit DB update 
+            cur, conn = setup_db("final.db") #Final DB 만들기
+            print("Create and update Kaggle table with 25 items")
+            cur, conn = create_update_kaggle_db(cur, conn, json_object)
+            option = input("Enter anything to load more items to the Kaggle table ")
+            cur, conn = create_update_kaggle_db(cur, conn, json_object)
+            print("\nCheck now there are 50 items in the Kaggle DB")
+            option = input("Enter anything to load more items to the Kaggle table ")
+            cur, conn = create_update_kaggle_db(cur, conn, json_object)
+            print("\nCheck now there are 75 items in the Kaggle DB")
+            option = input("Enter anything to load more items to the Kaggle table ")
+            cur, conn = create_update_kaggle_db(cur, conn, json_object)
+            print("\nCheck now there are 100 items in the Kaggle DB")
+
+            song_post_dict = search_reddit_posts_v1(cur) #fetched post data
+            # print(f"it should be 61 and it is {len(song_post_dict)}")
+
+            while(option != "exit"): #Reddit post 개수가 총 몇개 있을지 모르겠어서 일단 while true로 해놓음 -> 일단은 Reddit db 확인하면서 더이상 업데이트 안될때까지 해야함 (173 rows)
+                cur, conn = create_update_reddit_db(cur, conn, song_post_dict) #Reddit DB update 
+                option = input("Enter anything to load more items to the Reddit table, Check Reddit table each time ")
+
+            #write a calculation result as a csv file
+            count_reddit_posts(cur)
+
 
             """
             참고로 밑에 url 들어가면 api call 했을 때 어떤 식으로 json이 리턴되는지 바로 볼 수 있어.
@@ -584,23 +651,20 @@ def main():
 
             -할거 추가!- 
             1. Duplicate String 추가 확인하기 (e.g. KaggleData에 music_id, daily_rank, country, snapshot_date 다 똑같음)
-            2. 일자별 + 각 국가별 노래가 50개씩이라 "100 rows per API"아직 충족 못함 -> 다른 나라 노래 가져오는 것 고려
+            2. 일자별 + 각 국가별 노래가 50개씩이라 "100 rows per API"아직 충족 못함 -> 다른 나라 노래 가져오는 것 고려 -> 캐나다 노래 50개 가져옴
                 - 두 국가의 top 50에서 중복되는 노래가 있을 수 있는데, 노래 제목은 music_id로 바꿔서 저장하니까 redundant data는 딱히
-                  걱정 안해도 될 듯. 추가로 Country table까지 만들어서 foreign key로 reference하면 같은 곡이어도 구분 가능
-            3. KaggleData에 100 rows 다 저장하면 mention count 구하기
+                  걱정 안해도 될 듯. 추가로 Country table까지 만들어서 foreign key로 reference하면 같은 곡이어도 구분 가능 -> music_id와 country_id 둘다 동일하면 db에 안넣어지게 설정함. 그래서 같은 곡이라도 
+                  country_id 가 다르면 db에 들어감, 둘 다 같으면 안들어감
+            3. KaggleData에 100 rows 다 저장하면 mention count 구하기 -> 카운트 해서 csv 파일로 저장함
             4. setup_db() 내에서 create_update_kaggle_db() 및 create_update_reddit_db() 호출하기
                 - 더 깔끔함. 이렇게 하려면 load_kaggle_dataset()에서 create_update_kaggle_db() 호출하지 말것
-                - create_update_kaggle_db()에서 return 받은 값을 curr, conn이랑 같이 넘겨주는 방식?
+                - create_update_kaggle_db()에서 return 받은 값을 curr, conn이랑 같이 넘겨주는 방식? -> 일단은 각각 create_update_db() 부르는 방식으로 돼있음, 일단은 create_update_kaggle_db를 다 완료하고 
+                그 다음에 create_update_reddit_db를 불러야 돼서 두 함수를 각각 따로 빼놓는게 좋을거 같기도..한데 잘은 모르겟어 아직..ㅎㅎ
             5. 코드 정리
             6. Calculation function들 작성
             7. Visualization function들 작성
             8. 리포트 작성
             """
-
-            # total = 0
-            # print("\n📊 Summary:")
-            # for name, posts in results.items():
-            #     print(f"{name} with {posts} posts")
                 
 
         elif option == "2":
@@ -622,32 +686,6 @@ def main():
 
         print("-----------------------------------------------------------------------------------\n")
 
-
-# def main():
-    # subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
-    # keyword = "sza"
-
-    # results = count_reddit_posts(json_object)
-
-
-    # total = 0
-    # print("\n📊 Summary:")
-    # for sub, posts in results.items():
-    #     print(f"r/{sub}: {len(posts)} posts")
-    #     total += len(posts)
-    # print(f"\n🎯 Total posts with '{keyword}': {total}")
-
-    # print()
-    # print('//////////Filter post date////////////')
-
-    # filtered_results = {}
-    # filtered_count = 0
-    # for sub, posts in results.items():
-    #     filtered_results[sub] = filter_by_date(posts, "2025-03-01", "2025-04-01")
-    #     print(f"r/{sub}: {len(filtered_results[sub])} posts between Mar 2025 and Apr 2025")
-    #     filtered_count += len(filtered_results[sub])
-    
-    # print(f"📊 Found {filtered_count} posts with '{keyword}' between Mar 2025 and Apr 2025")
 
 
 

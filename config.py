@@ -39,3 +39,7 @@ def get_reddit_api_auth():
         raise ValueError("Credentials for Reddit API 'REDDIT_CLIENT_ID' or 'REDDIT_CLIENT_SECRET' not found.")
 
     return {"client_id": client_id, "client_secret": client_secret}
+
+REDDIT_CLIENT_ID = "NtPWkoFRBKm-2fVI5BjPyA"
+REDDIT_CLIENT_SECRET = "_OhwF5WQAjwbjvMAHa7_Ccwpbuf2vg"
+REDDIT_USER_AGENT = "si206-final-project/1.0 by u/Designer_Revenue_411"
