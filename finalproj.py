@@ -175,38 +175,64 @@ def update_database(data=None, filename=None):
 #            print(f"count : {count}")
 
 #     return count
-def count_reddit_posts(json_data):
-    reddit_dict = {}
-    for music in json_data:
-        name = music["name"]
-        post_count = search_reddit_posts(name)
-        reddit_dict[name] = post_count
+
+"""
+나중에 DB 다 완성되면 쓸 function
+Count reddit posts containing specific keyword in title or text by selecting data from Reddit DB
+"""
+def count_reddit_posts(keyword):
+   pass
     
-    return json.dumps(reddit_dict)
+"""
+새로 만듦
+Set up database in local directory and returns cursor and connection objects
+"""
+def setup_db(db_name):
+    path = os.path.dirname(os.path.abspath(__file__))
+    conn = sqlite3.connect(path + "/" + db_name)
+    cur = conn.cursor()
+    return cur, conn
             
+"""
+새로 만듦
+Create Reddit database using passed cursor and connection objects
+It stores less than 25 items each time it's called and makes sure there's no duplicates -> 이건 아직 모르겠음
+"""
+def create_update_reddit_db(cur, conn, post_dict):
+    cur.execute("CREATE TABLE IF NOT EXISTS Reddit (id INTEGER PRIMARY KEY, title TEXT, music_name TEXT)")
+    count = 0
+    reached_25 = False
 
+    for keyword, data_list in post_dict.items():
+        for data in data_list:
+            print(count)
+            cur.execute("INSERT OR IGNORE INTO Reddit (id, title, music_name) VALUES (?,?,?)", (count, data["title"], keyword))
+            count += 1
+            if count >= 25:
+                reached_25 = True
+                break
+        if reached_25:
+            break
+    conn.commit()
 
-
-def search_reddit_posts(keyword, max_posts_per_sub=400):
+"""
+새로 수정한 function
+Search reddit posts containing specific keyword
+It does not count the number of posts, but just returns the dictionary with fetched data. -> update the dictionary
+key는 keyword(i.e. music name)이고 keyword 당 모든 subreddit에서 matching된 post data를 저장한 list를 value로 함
+"""
+def search_reddit_posts(keyword, post_dict, max_posts_per_sub=400):
     headers = {
         "User-Agent": "KeywordTracker/1.0 by si206final"
     }
-
-    all_results = {}
-    total_count = 0
-
-    '''
-    for (all kaggle json data):
-        if (the song critera chosen == true (e.g. [song1, song2, ..., song25]))
-            
-    '''
+    data_list = []
     subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
 
     for sub in subreddits:
         print(f"\n🔍 Searching r/{sub} for keyword: '{keyword}'...")
-        posts = []
         after = None
         fetched = 0
+        count = 0
 
         while fetched < max_posts_per_sub:
             url = f"https://www.reddit.com/r/{sub}/search.json"
@@ -228,15 +254,15 @@ def search_reddit_posts(keyword, max_posts_per_sub=400):
             data = response.json().get("data", {})
             children = data.get("children", [])
 
-            if not children:
+            if not children: #no posts
                 break
 
             for child in children:
                 post = child["data"]
                 # Check keyword in title or text
-                
                 if keyword.lower() in (post.get("title", "").lower() + " " + post.get("selftext", "").lower()):
-                    posts.append(post)
+                    data_list.append(post)
+                    count += 1
 
             fetched += len(children)
             after = data.get("after") #to get more than 100 results
@@ -245,28 +271,95 @@ def search_reddit_posts(keyword, max_posts_per_sub=400):
             if not after:
                 break
 
-            time.sleep(1)  # avoid rate-limiting
+            time.sleep(2)  # avoid rate-limiting 
+        print(f"✅ Found {count} matching posts in r/{sub}")    
+    # print(f"data list size is {len(data_list)}")
+    post_dict[keyword] = data_list # ex) {"NOKIA" : [{post1}, {post2}, {post3} ... ] }
+    return post_dict
 
-        print(f"✅ Found {len(posts)} matching posts in r/{sub}")
-        total_count += len(posts)
-        all_results[sub] = posts
+"""
+Search reddit posts in past month that contain specific keyword in title or text.
+It returns the total count of posts
+"""
+# def search_reddit_posts(keyword, max_posts_per_sub=400):
+#     headers = {
+#         "User-Agent": "KeywordTracker/1.0 by si206final"
+#     }
+
+#     all_results = {}
+#     total_count = 0
+
+#     '''
+#     for (all kaggle json data):
+#         if (the song critera chosen == true (e.g. [song1, song2, ..., song25]))
+            
+#     '''
+#     subreddits = ["popheads", "Music", "hiphopheads", "popculturechat"] #popular music relevant subreddits
+
+#     for sub in subreddits:
+#         print(f"\n🔍 Searching r/{sub} for keyword: '{keyword}'...")
+#         posts = []
+#         after = None
+#         fetched = 0
+
+#         while fetched < max_posts_per_sub:
+#             url = f"https://www.reddit.com/r/{sub}/search.json"
+#             params = {
+#                 "q": keyword,
+#                 "restrict_sr": "on", #only search in the subreddit
+#                 "sort": "top",
+#                 "t": "month",
+#                 "limit": 100, #number of items to fetch
+#             }
+#             if after:
+#                 params["after"] = after
+
+#             response = requests.get(url, headers=headers, params=params)
+#             if response.status_code != 200:
+#                 print(f"Error fetching from r/{sub}: {response.status_code}")
+#                 break
+
+#             data = response.json().get("data", {})
+#             children = data.get("children", [])
+
+#             if not children:
+#                 break
+
+#             for child in children:
+#                 post = child["data"]
+#                 # Check keyword in title or text
+#                 if keyword.lower() in (post.get("title", "").lower() + " " + post.get("selftext", "").lower()):
+#                     posts.append(post)
+
+#             fetched += len(children)
+#             after = data.get("after") #to get more than 100 results
+#             #If after is None or missing, that means: You've reached the last page of results.
+
+#             if not after:
+#                 break
+
+#             time.sleep(2)  # avoid rate-limiting
+
+#         print(f"✅ Found {len(posts)} matching posts in r/{sub}")
+#         total_count += len(posts)
+#         all_results[sub] = posts
     
-    return total_count
+#     return total_count
 
-def filter_by_date(posts, start_date, end_date):
-    """
-    Filters posts to only include those within the date range.
-    start_date and end_date should be in 'YYYY-MM-DD' format.
-    """
-    start_ts = int(time.mktime(datetime.strptime(start_date, "%Y-%m-%d").timetuple()))
-    end_ts = int(time.mktime(datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
+# def filter_by_date(posts, start_date, end_date):
+#     """
+#     Filters posts to only include those within the date range.
+#     start_date and end_date should be in 'YYYY-MM-DD' format.
+#     """
+#     start_ts = int(time.mktime(datetime.strptime(start_date, "%Y-%m-%d").timetuple()))
+#     end_ts = int(time.mktime(datetime.strptime(end_date, "%Y-%m-%d").timetuple()))
 
-    filtered = []
-    for post in posts:
-        post_time = post.get("created_utc")
-        if post_time and start_ts <= post_time <= end_ts:
-            filtered.append(post)
-    return filtered
+#     filtered = []
+#     for post in posts:
+#         post_time = post.get("created_utc")
+#         if post_time and start_ts <= post_time <= end_ts:
+#             filtered.append(post)
+#     return filtered
 
 
 def update_kaggle_database(json_data):
@@ -319,12 +412,27 @@ def main():
                 "snapshot_date": "2025-04-18"
             }
             json_object = load_kaggle_dataset(criteria, load_option)
-            results = count_reddit_posts(json_object)
 
-            total = 0
-            print("\n📊 Summary:")
-            for name, posts in results.items():
-                print(f"{name} with {posts} posts")
+            post_dict = {} # music_name을 key로 하고 그에 해당하는 [{post1}, {post2}, {post3} ...]을 value로 하는 dict, post는 모든 subreddit에서 서치된 포스드들임
+            keyword = json_object[0]["name"] #일단 테스트용으로 첫번째 노래만 해봄
+            post_dict = search_reddit_posts(keyword, post_dict) #fetched post data
+            cur, conn = setup_db("reddit.db") #Reddit DB 만들기
+            create_update_reddit_db(cur, conn, post_dict) #Reddit DB update 
+
+            """
+            참고로 밑에 url 들어가면 api call 했을 때 어떤 식으로 json이 리턴되는지 바로 볼 수 있어.
+            https://www.reddit.com/r/Music/search.json?q=NOKIA&restrict_sr=on&sort=top&t=month&limit=100
+
+            -앞으로 더 해야할 것-
+            1. Reddit table에 id INTEGER PRIMARY KEY AUTOINCREMENT 설정하기
+            2. music_id DB 만들기 -> 지금 Reddit DB에 있는 duplicate string들을 int id 로 바꾸기
+            3. 모든 노래에 대해서 Reddit db 업데이트 하기 
+            """
+
+            # total = 0
+            # print("\n📊 Summary:")
+            # for name, posts in results.items():
+            #     print(f"{name} with {posts} posts")
                 
 
         elif option == "2":
