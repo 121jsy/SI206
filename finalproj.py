@@ -36,12 +36,17 @@ import requests
 from datetime import datetime
 import time
 
-from config import get_reddit_api_auth
+import config
 
 import kagglehub
 from kagglehub import KaggleDatasetAdapter
 
-# kagglehub.login()
+# Using OAuth to increase rate limit
+reddit = praw.Reddit(
+    client_id=config.REDDIT_CLIENT_ID,
+    client_secret=config.REDDIT_CLIENT_SECRET,
+    user_agent=config.REDDIT_USER_AGENT
+)
 
 def load_kaggle_dataset(criteria, option="1"):
     '''
@@ -60,38 +65,34 @@ def load_kaggle_dataset(criteria, option="1"):
 
     current_directory = os.path.dirname(os.path.abspath(__file__))
 
-    # Load Kaggle dataset into python object
+    # Load Kaggle dataset into dataframe python object
     df = kagglehub.dataset_load(
         KaggleDatasetAdapter.PANDAS,
         "asaniczka/top-spotify-songs-in-73-countries-daily-updated",
         "universal_top_spotify_songs.csv",
-        pandas_kwargs={"usecols": ["name", "artists", "daily_rank", "daily_movement", "weekly_movement", "country", "snapshot_date", "popularity"]}
+        pandas_kwargs={"usecols": ["name", "artists", "daily_rank", "country", "snapshot_date", "popularity"]}
     )
 
-    # Check if the dataset is loaded successfully
     if df is not None:
-        print("Dataset loaded successfully.")
-        print(df.head(10))
-        print(df.columns)
-    else:
-        print("Failed to load dataset.")
-        return None
 
-    # Filter the dataframe based on criteria
-    filtered_df = df
-    for criteria_key, criteria_val in criteria.items():
-        filtered_df = filtered_df.loc[(filtered_df[criteria_key] == criteria_val)]
-    
-    # print(filtered_df)
+        print("Dataset loaded successfully.\n")
 
-    if filtered_df is not None:
+        # Filter the dataframe based on criteria
+        filtered_df = df
+        for criteria_key, criteria_val in criteria.items():
+            filtered_df = filtered_df.loc[(filtered_df[criteria_key] == criteria_val)]
+
+        # TESTING - display whole dataset
+        print(filtered_df)
+        print()
+
         # Option 1: Convert the dataset to .json (for project's purpose) format and keep as a python object
         if option == "1":
             print("Option 1 (default): Saving dataset as json format python object")
             json_string = filtered_df.to_json(orient='records', lines=False)
             json_object = json.loads(json_string)
-            # print(json_object)
-            # update_database(data=json_object)
+
+            create_update_kaggle_db(json_object)
 
             return json_object
 
@@ -103,23 +104,87 @@ def load_kaggle_dataset(criteria, option="1"):
             
             update_database(filename='universal_top_spotify_songs.json')
     else:
-        print("Failed to load dataset.")
+        print("Failed to load dataset.\n")
 
 
-def update_database(data=None, filename=None):
+
+'''
+기존에 안쓰이던 function 업데이트: Music table (id, unique music name), KaggleData table (잡다한 정보+ Music table의 
+id foreign key로 reference) 생성. 나중에 고려해야 될 것들: 
+1. KaggleData table의 id, music_id, daily_rank가 다 똑같음
+2. country, snapshot_date column에 있는 값들 다 똑같음
+3. snapshot_date는 아예 없애고, country는 새로운 table을 만들고 foreign key로 reference하는게 어떨지?
+'''
+def create_update_kaggle_db(json_object=None):
     '''
     Updates the database SQLite database with the json data or filename. If the data is
     provided, it will insert the data directly into the database. If the filename is provided,
     it will read the file and insert the data into the database.
 
     ARGUMENTS:
-        data (list): A list of dictionaries containing the data to be inserted into the database.
-        filename (str): The name of the json file containing the data to be inserted into the database.
-    
-    RETURNS:
-        Bool: True if database is successfully updated, False otherwise.
+        json_object (dict): A dictionary containing the data retrieved with Kaggle API
     '''
-    pass
+
+    path = os.path.dirname(os.path.abspath(__file__))
+    conn = sqlite3.connect(path + "/reddit.db")
+    cur = conn.cursor()
+
+    # Create Music table (unique music name and id)
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Music (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE
+        )
+    ''')
+    # Create KaggleData table (linked to Music table with FOREIGN KEY)
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS KaggleData (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            music_id INTEGER UNIQUE,
+            daily_rank INTEGER,
+            country TEXT,
+            snapshot_date TEXT,
+            popularity INTEGER,
+            FOREIGN KEY (music_id) REFERENCES Music(id)
+        )
+    ''')
+
+    # Insert the data into the Music table and KaggleData table
+    if json_object is not None:
+        count = 0
+        for music in json_object:
+            if count >= 25:
+                conn.commit()
+                return
+            name = music["name"]
+
+            # To avoid inconsistent id, check if song exists in the Music table
+            # Without this step, the "id" will be skipped (e.g. 24, 25, 51, 52, ...)
+            cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
+            row = cur.fetchone()
+            if row is None:
+                cur.execute("INSERT OR IGNORE INTO Music (name) VALUES (?)", (name,))
+                music_id = cur.lastrowid
+            else:
+                music_id = row[0]
+
+            # Get the corresponding music_id from the Music table
+            cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
+            music_id = cur.fetchone()[0]
+            # Insert the rest of the data into the KaggleData table
+            daily_rank = music["daily_rank"]
+            country = music["country"]
+            snapshot_date = music["snapshot_date"]
+            popularity = music["popularity"]
+
+            cur.execute("INSERT OR IGNORE INTO KaggleData (music_id, daily_rank, country, snapshot_date, popularity) VALUES (?, ?, ?, ?, ?)",
+                        (music_id, daily_rank, country, snapshot_date, popularity))
+            
+            if cur.rowcount == 1:   # rowcount property returns the affected by the previous execute()
+                count += 1          # Thus, if the affected (newly inserted) row is 1, increment count
+
+    conn.commit()
+    conn.close()
 
 
 # def search_reddit_data():
@@ -194,26 +259,109 @@ def setup_db(db_name):
     return cur, conn
             
 """
-새로 만듦
 Create Reddit database using passed cursor and connection objects
 It stores less than 25 items each time it's called and makes sure there's no duplicates -> 이건 아직 모르겠음
+25 개씩 넣는 logic 약간 수정, Music table에 있는 id를 reference 해서 삽입
 """
 def create_update_reddit_db(cur, conn, post_dict):
-    cur.execute("CREATE TABLE IF NOT EXISTS Reddit (id INTEGER PRIMARY KEY, title TEXT, music_name TEXT)")
-    count = 0
-    reached_25 = False
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS Reddit (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT UNIQUE,
+            music_id INTEGER,
+            FOREIGN KEY (music_id) REFERENCES Music(id)
+        )
+    ''')
 
-    for keyword, data_list in post_dict.items():
-        for data in data_list:
-            print(count)
-            cur.execute("INSERT OR IGNORE INTO Reddit (id, title, music_name) VALUES (?,?,?)", (count, data["title"], keyword))
-            count += 1
+    count = 0
+
+    for song, posts in post_dict.items():
+        for post in posts:
             if count >= 25:
-                reached_25 = True
-                break
-        if reached_25:
-            break
+                conn.commit()
+                return
+            cur.execute("SELECT id FROM Music WHERE name = ?", (song,))
+            music_id = cur.fetchone()[0]
+            cur.execute("INSERT OR IGNORE INTO Reddit (title, music_id) VALUES (?, ?)",
+                        (post['title'], music_id))
+            if cur.rowcount == 1:   # rowcount property returns the affected by the previous execute()
+                count += 1          # Thus, if the affected (newly inserted) row is 1, increment count
+
     conn.commit()
+
+'''
+Reddit OAuth랑 PRAW사용해서 rate limit 늘리고 data retrieval efficiency 최대한 늘린 버전
+1. search_reddit_posts() 에서는 json_data를 받고, 그걸 읽어서 노래를 5개씩 묶은 리스트를 만든 후, group_search()에 넘겨줌
+2. group_search()에서는 노래 제목들을 받고, subreddit을 그루핑 한 후 그 그룹의 subreddit에서 검색, 그 결과를 다시 search_reddit_posts()에 넘겨줌
+3. group_search()에서 리턴된 결과를 search_reddit_posts()이 받으면 song_posts에 업데이트 하는 방식
+'''
+def search_reddit_posts_v1(json_data):
+    """
+    Retrieves Reddit posts mentioning each song in the provided JSON data.
+    Groups 5 songs together per Reddit API search to be more efficient.
+    """
+
+    # {"song_name1": [{post1 data}, {post2 data}, ...], "song_name2": [{post1}, {post2}, ...], ...}
+    song_posts = {}
+
+    grouping_size = 5   # Number of songs to group for efficient search
+    total_songs = len(json_data)
+
+    # Increase the start_index by +grouping_size (5) each time, until it reaches total_songs (100)
+    # Updates the grouped_songs list with 5 songs each time
+    for start_index in range(0, total_songs, grouping_size):
+        grouped_songs = [] # ["song_name1", "song_name2", ..., "song_name5"]
+        for i in range(start_index, start_index + grouping_size):
+            grouped_songs.append(json_data[i]["name"])
+
+        group_search_results = group_search(grouped_songs)
+
+        for song_name, posts in group_search_results.items():
+            song_posts[song_name] = posts
+
+        time.sleep(0.6)
+
+    return song_posts
+
+def group_search(song_names, max_posts=100):
+    """
+    Searches for Reddit posts containing the group of song names in the chosen subreddit group. 
+    Seaches from the top posts of past month.
+
+    ARGUMENTS:
+        song_names (list): A list of song names to search for.
+        max_posts (int): The maximum number of posts to retrieve.
+    RETURNS:
+        posts_by_song (dict): A dictionary where keys are song names and values are lists of Reddit posts
+        containing those song names.
+    """
+    # Group up the subreddits to search in
+    subreddit_group = "Music+hiphopheads+popheads+popculturechat"
+    query = " OR ".join([f'"{name}"' for name in song_names])
+
+    # Prepopulated dictionary 
+    # {"song_name1": [{post1 data}, {post2 data}, ...], "song_name2": [{post1}, {post2}, ...], ...}
+    posts_by_song = {}
+    for name in song_names:
+        posts_by_song[name] = []
+
+    subreddit = reddit.subreddit(subreddit_group)
+    # Search for posts in the chosen subreddits
+    for post in subreddit.search(query, sort="top", time_filter="month", limit=max_posts):
+        # Text of the title and selftext of the post (lowercased for proper match count)
+        text = (post.title + " " + post.selftext).lower()
+
+        # Check if the post contains the music name. If so, insert into dictionary
+        for song in song_names:
+            if song.lower() in text:
+                post_data = {
+                    "id": post.id,
+                    "title": post.title,
+                }
+                posts_by_song[song].append(post_data)
+
+    return posts_by_song
+
 
 """
 새로 수정한 function
@@ -362,12 +510,6 @@ It returns the total count of posts
 #     return filtered
 
 
-def update_kaggle_database(json_data):
-    '''
-
-    '''
-
-
 
 def main():
     # ========================================================================================
@@ -413,21 +555,46 @@ def main():
             }
             json_object = load_kaggle_dataset(criteria, load_option)
 
+            # 기존 방식
+            '''
             post_dict = {} # music_name을 key로 하고 그에 해당하는 [{post1}, {post2}, {post3} ...]을 value로 하는 dict, post는 모든 subreddit에서 서치된 포스드들임
             keyword = json_object[0]["name"] #일단 테스트용으로 첫번째 노래만 해봄
             post_dict = search_reddit_posts(keyword, post_dict) #fetched post data
             cur, conn = setup_db("reddit.db") #Reddit DB 만들기
             create_update_reddit_db(cur, conn, post_dict) #Reddit DB update 
+            '''
+
+            # 
+            cur, conn = setup_db("reddit.db") #Reddit DB 만들기
+            song_post_dict = search_reddit_posts_v1(json_object) #fetched post data
+            create_update_reddit_db(cur, conn, song_post_dict) #Reddit DB update 
 
             """
             참고로 밑에 url 들어가면 api call 했을 때 어떤 식으로 json이 리턴되는지 바로 볼 수 있어.
             https://www.reddit.com/r/Music/search.json?q=NOKIA&restrict_sr=on&sort=top&t=month&limit=100
 
             -앞으로 더 해야할 것-
-            1. Reddit table에 id INTEGER PRIMARY KEY AUTOINCREMENT 설정하기
-            2. music_id DB 만들기 -> 지금 Reddit DB에 있는 duplicate string들을 int id 로 바꾸기
-            3. 모든 노래에 대해서 Reddit db 업데이트 하기 
-            4. kaggle DB 만들기
+            1. Reddit table에 id INTEGER PRIMARY KEY AUTOINCREMENT 설정하기 -> 해결
+            2. music_id DB 만들기 -> 지금 Reddit DB에 있는 duplicate string들을 int id 로 바꾸기 -> 해결
+            3. 모든 노래에 대해서 Reddit db 업데이트 하기  -> 해결
+            4. kaggle DB 만들기 -> 해결
+
+            -directory 변경사항- 
+            1. config.py에 REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT 넣기 <- 이건 내일 알려줄게
+
+            -할거 추가!- 
+            1. Duplicate String 추가 확인하기 (e.g. KaggleData에 music_id, daily_rank, country, snapshot_date 다 똑같음)
+            2. 일자별 + 각 국가별 노래가 50개씩이라 "100 rows per API"아직 충족 못함 -> 다른 나라 노래 가져오는 것 고려
+                - 두 국가의 top 50에서 중복되는 노래가 있을 수 있는데, 노래 제목은 music_id로 바꿔서 저장하니까 redundant data는 딱히
+                  걱정 안해도 될 듯. 추가로 Country table까지 만들어서 foreign key로 reference하면 같은 곡이어도 구분 가능
+            3. KaggleData에 100 rows 다 저장하면 mention count 구하기
+            4. setup_db() 내에서 create_update_kaggle_db() 및 create_update_reddit_db() 호출하기
+                - 더 깔끔함. 이렇게 하려면 load_kaggle_dataset()에서 create_update_kaggle_db() 호출하지 말것
+                - create_update_kaggle_db()에서 return 받은 값을 curr, conn이랑 같이 넘겨주는 방식?
+            5. 코드 정리
+            6. Calculation function들 작성
+            7. Visualization function들 작성
+            8. 리포트 작성
             """
 
             # total = 0
