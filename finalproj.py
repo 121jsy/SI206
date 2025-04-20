@@ -427,6 +427,7 @@ def main():
             1. Reddit table에 id INTEGER PRIMARY KEY AUTOINCREMENT 설정하기
             2. music_id DB 만들기 -> 지금 Reddit DB에 있는 duplicate string들을 int id 로 바꾸기
             3. 모든 노래에 대해서 Reddit db 업데이트 하기 
+            4. kaggle DB 만들기
             """
 
             # total = 0
