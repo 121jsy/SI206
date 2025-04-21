@@ -6,6 +6,7 @@ import sqlite3
 import csv
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 
 def setup_db(db_name):
     '''
@@ -154,6 +155,127 @@ def visualize_top10_reddit_mentions(filename):
     plt.title("Top 10 Songs by Reddit Mentions")
     plt.show()
 
+def visualize_ranking_us_vs_ca(cur):
+    """
+    Visualizes the differences of music rankings between the US and Canada.
+
+    ARGUMENTS:
+        cur: cursor object
+    RETURNS:
+        None
+    """
+
+    # Get US data
+    cur.execute("""
+    SELECT
+        Music.name, KaggleData.daily_rank FROM KaggleData JOIN Music ON KaggleData.music_id = Music.id
+        WHERE KaggleData.country_id = 1
+    """)
+
+    us_data = cur.fetchall()
+
+    # Get CA data
+    cur.execute("""
+    SELECT
+        Music.name, KaggleData.daily_rank FROM KaggleData JOIN Music ON KaggleData.music_id = Music.id
+        WHERE KaggleData.country_id = 2
+    """)
+
+    ca_data = cur.fetchall()
+
+    us_dict = dict(us_data)
+    ca_dict = dict(ca_data)
+    
+
+    # Create a figure
+    plt.figure(figsize=(10, 6))
+
+    # Plot the songs common to both countries
+    common_songs = set(us_dict.keys()) & set(ca_dict.keys())
+    for song in common_songs:
+        plt.scatter(song, us_dict[song], color='blue', label='US' if song == next(iter(common_songs)) else "", s=100)
+        plt.scatter(song, ca_dict[song], color='red', label='Canada' if song == next(iter(common_songs)) else "", s=100)
+
+    # Plot the songs only in US
+    # us_only_songs = set(us_dict.keys()) - set(ca_dict.keys())
+    # for song in us_only_songs:
+    #     plt.scatter(song, us_dict[song], color='blue', s=100)
+
+    # # Plot the songs only in Canada
+    # ca_only_songs = set(ca_dict.keys()) - set(us_dict.keys())
+    # for song in ca_only_songs:
+    #     plt.scatter(song, ca_dict[song], color='red', s=100)
+
+    # Set labels and title
+    plt.xlabel('Song Name')
+    plt.ylabel('Ranking')
+    plt.title('Ranking Comparison Between US and Canada')
+
+
+    plt.ylim(0, 50)  # Set y-axis range from 1 to 50
+    plt.yticks(np.concatenate(([1], np.arange(5, 56, 5))))  # Set ticks at multiples of 5
+
+    # Invert y-axis to have 1 at the top
+    plt.gca().invert_yaxis()
+
+    # Add legend for the countries
+    plt.legend()
+
+    # Rotate x-axis labels for better visibility
+    plt.xticks(rotation=90)
+
+
+    # Display the plot
+    plt.tight_layout()
+    plt.show()
+    
+def visualize_spotify_popularity_vs_reddit_countries(cur):
+    '''
+    Visualizes the Spotify popularity v.s. Reddit mentions as a scatterplot
+    by reading from the database. Differentiates by country.
+
+    ARGUMENTS:
+        cur: cursor object
+    RETURNS:
+        None
+    '''
+
+    # popularity = []
+    # mention_count = []
+
+    country_data = {}
+
+    cur.execute('''
+        SELECT Country.name, Music.name, KaggleData.popularity, COUNT(Reddit.id) as mention_count
+        FROM Music
+        JOIN Reddit ON Music.id = Reddit.music_id
+        JOIN KaggleData ON Music.id = KaggleData.music_id
+        JOIN Country ON KaggleData.country_id = Country.id
+        GROUP BY Country.name, Music.name
+    ''')
+    rows = cur.fetchall()
+    
+    for row in rows:
+        country_name = row[0]
+        popularity = row[2]
+        mention_count = row[3]
+        if country_name not in country_data:
+            country_data[country_name] = {"popularity": [], "mention_count": []}
+        country_data[country_name]["popularity"].append(popularity)
+        country_data[country_name]["mention_count"].append(mention_count)
+    
+    plt.figure(figsize=(10, 6))
+    for country_name, data in country_data.items():
+        plt.scatter(data["popularity"], data["mention_count"], alpha=0.3, edgecolors='black', label=country_name)
+
+    plt.xlabel("Spotify Popularity")
+    plt.ylabel("Reddit Mention Count")
+    plt.title("Spotify Popularity vs Reddit Mention Count")
+    plt.legend(country_data.keys())
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
 
 def visualize_spotify_popularity_vs_reddit(cur):
     '''
@@ -239,6 +361,8 @@ def main():
     filename = "reddit_post_counts.csv"
 
     # Visualization
+    visualize_ranking_us_vs_ca(cur)
+    
     visualize_top10_reddit_mentions(filename)
 
     visualize_spotify_mentions_ordered(cur, filename)
@@ -247,7 +371,9 @@ def main():
 
     visualize_spotify_ranking_vs_reddit(cur)
 
+    visualize_spotify_popularity_vs_reddit_countries(cur)
 
+    
 
     conn.close()
 
