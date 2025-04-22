@@ -1,4 +1,4 @@
-# select_data.py
+# FinalProject_visualize.py
 # For PART 3 of FinalProjectInstructions, or part 5 of the GradingScript
 
 import os 
@@ -141,7 +141,7 @@ def visualize_top10_reddit_mentions(filename):
     plt.title("Top 10 Songs by Reddit Mentions")
     plt.show()
 
-def visualize_ranking_us_vs_ca(cur):
+def visualize_ranking_c1_vs_c2_common(cur):
     """
     Visualizes the differences of music rankings between the US and Canada as an overlaid scatter plot. 
 
@@ -151,36 +151,47 @@ def visualize_ranking_us_vs_ca(cur):
         None
     """
 
-    # Get US data
+    # Get Country 1 data
     cur.execute("""
-    SELECT
-        Music.name, KaggleData.daily_rank FROM KaggleData JOIN Music ON KaggleData.music_id = Music.id
+        SELECT Music.name, KaggleData.daily_rank, Country.name FROM KaggleData 
+        JOIN Music ON KaggleData.music_id = Music.id
+        JOIN Country ON KaggleData.country_id = Country.id
         WHERE KaggleData.country_id = 1
     """)
 
-    us_data = cur.fetchall()
+    c1_data = cur.fetchall()
 
-    # Get CA data
+    # Get Country 2 data
     cur.execute("""
-    SELECT
-        Music.name, KaggleData.daily_rank FROM KaggleData JOIN Music ON KaggleData.music_id = Music.id
+        SELECT Music.name, KaggleData.daily_rank, Country.name FROM KaggleData 
+        JOIN Music ON KaggleData.music_id = Music.id
+        JOIN Country ON KaggleData.country_id = Country.id
         WHERE KaggleData.country_id = 2
     """)
 
-    ca_data = cur.fetchall()
+    c2_data = cur.fetchall()
 
-    us_dict = dict(us_data)
-    ca_dict = dict(ca_data)
+    c1_dict = {}
+    c2_dict = {}
+
+    for i in range(len(c1_data)):
+        c1_dict[c1_data[i][0]] = c1_data[i][1]
+    
+    for i in range(len(c2_data)):
+        c2_dict[c2_data[i][0]] = c2_data[i][1]
+
+    c1_name = c1_data[0][2]
+    c2_name = c2_data[0][2]
     
 
     # Create a figure
     plt.figure(figsize=(10, 6))
 
     # Plot the songs common to both countries
-    common_songs = set(us_dict.keys()) & set(ca_dict.keys())
+    common_songs = set(c1_dict.keys()) & set(c2_dict.keys())
     for song in common_songs:
-        plt.scatter(song, us_dict[song], color='blue', label='US' if song == next(iter(common_songs)) else "", s=100)
-        plt.scatter(song, ca_dict[song], color='red', label='Canada' if song == next(iter(common_songs)) else "", s=100)
+        plt.scatter(song, c1_dict[song], color='blue', label=c1_name if song == next(iter(common_songs)) else "", s=100)
+        plt.scatter(song, c2_dict[song], color='red', label=c2_name if song == next(iter(common_songs)) else "", s=100)
 
     # Plot the songs only in US
     # us_only_songs = set(us_dict.keys()) - set(ca_dict.keys())
@@ -195,7 +206,7 @@ def visualize_ranking_us_vs_ca(cur):
     # Set labels and title
     plt.xlabel('Song Name')
     plt.ylabel('Ranking')
-    plt.title('Ranking Comparison Between US and Canada')
+    plt.title(f'Ranking Comparison Between {c1_name} and {c2_name}')
 
 
     plt.ylim(0, 50)  # Set y-axis range from 1 to 50
@@ -326,17 +337,25 @@ def visualize_spotify_ranking_vs_reddit(cur):
         daily_ranks.append(row[0])
         mentions.append(row[1])
 
+    daily_ranks = sorted(daily_ranks, reverse=True)
+
     plt.figure(figsize=(10,6))
     plt.scatter(daily_ranks, mentions)
-    plt.gca().invert_xaxis()  # Rank 1 on the left
+    # plt.gca().invert_xaxis()  # Rank 1 on the left
     plt.xlabel("Spotify Daily Rank (ascending)")
     plt.ylabel("Reddit Mentions")
-    plt.title("Reddit Mentions vs Spotify Daily Rank")
+    plt.title("Spotify Daily Rank vs Reddit Mentions")
     plt.grid(True)
     plt.show()
 
 
 def main():
+
+    print("===================================================================================")
+    print("SI 206 W25 Final Project")
+    print("Music trend analysis with Kaggle and Reddit API - DATA VISUALIZATION")
+    print("===================================================================================\n")
+
     # Set up database
     db_name = "final.db"
     cur, conn = setup_db(db_name)
@@ -346,20 +365,52 @@ def main():
 
     filename = "reddit_post_counts.csv"
 
-    # Visualization
-    visualize_ranking_us_vs_ca(cur)
+    options = '''Options:
+    1. Option 1: Spotify Daily Rank - Country 1 vs. Country 2 (common songs)
+    2. Option 2: Spotify Daily Rank (ascending) vs. Reddit Mention Frequency (bar)
+    3. Option 3: Spotify Popularity vs. Reddit Mention Frequency
+    4. Option 4: Spotify Daily Rank (ascending) vs. Reddit Mention Frequency (scatter)
+    5. Option 5: Spotify Popularity (country 1 and country 2) vs. Reddit Mention Frequency
+    6. Option 6: Top 10 Songs by Reddit Mentions
+    8. Option 7: Everything
+    8. Exit\n'''
     
-    visualize_top10_reddit_mentions(filename)
+    print(options)
 
-    visualize_spotify_mentions_ordered(cur, filename)
+    option = 0
 
-    visualize_spotify_popularity_vs_reddit(cur)
-
-    visualize_spotify_ranking_vs_reddit(cur)
-
-    visualize_spotify_popularity_vs_reddit_countries(cur)
-
-    
+    while option != 8: 
+        option = int(input("\nPlease select an option (1-8): "))
+        if option == 1:
+            print("\nOption 1: Spotify Daily Rank - Country 1 vs. Country 2 (common songs)")
+            visualize_ranking_c1_vs_c2_common(cur)
+        elif option == 2:
+            print("\nOption 2: Spotify Daily Rank (ascending) vs. Reddit Mention Frequency (bar)")
+            visualize_spotify_mentions_ordered(cur, filename)
+        elif option == 3:
+            print("\nOption 3: Spotify Popularity vs. Reddit Mention Frequency")
+            visualize_spotify_popularity_vs_reddit(cur)
+        elif option == 4:
+            print("\nOption 4: Spotify Daily Rank (ascending) vs. Reddit Mention Frequency (scatter)")
+            visualize_spotify_ranking_vs_reddit(cur)
+        elif option == 5:
+            print("\nOption 5: Spotify Popularity (country 1 and country 2) vs. Reddit Mention Frequency")
+            visualize_spotify_popularity_vs_reddit_countries(cur)
+        elif option == 6:
+            print("\nOption 6: Top 10 Songs by Reddit Mentions")
+            visualize_top10_reddit_mentions(filename)
+        elif option == 7:
+            print("Everything")
+            visualize_ranking_c1_vs_c2(cur)
+            visualize_spotify_mentions_ordered(cur, filename)
+            visualize_spotify_popularity_vs_reddit(cur)
+            visualize_spotify_ranking_vs_reddit(cur)
+            visualize_spotify_popularity_vs_reddit_countries(cur)
+            visualize_top10_reddit_mentions(filename)
+        elif option == 8:
+            print("Exiting the program...")
+        else:
+            print("\nINVALID OPTION\n")    
 
     conn.close()
 

@@ -30,11 +30,8 @@ Visualization Tools:
 import os
 import sqlite3
 import json
-import pandas as pd
-import requests
 from datetime import datetime, timedelta
 import time
-import csv
 
 import config
 
@@ -88,7 +85,7 @@ def load_kaggle_dataset(criteria, option="1"):
         print(filtered_df)
         print()
 
-        # Option 1: Convert the dataset to .json (for project's purpose) format and keep as a python object
+        # Option 1: Convert the dataset to JSON (for project's purpose) format and keep as a python object
         if option == "1":
             print("Option 1 (default): Saving dataset as json format python object")
             json_string = filtered_df.to_json(orient='records', lines=False)
@@ -96,7 +93,8 @@ def load_kaggle_dataset(criteria, option="1"):
 
             return json_object
 
-        # Option 2: Convert the dataset to .json format (for project's purpose) and save it in the current directory
+        # Option 2: Convert the dataset to JSON format (for project's purpose) and save it in the current directory.
+        #           For testing and viewing data contents
         elif option == "2":
             filtered_df.to_json(os.path.join(current_directory, 'universal_top_spotify_songs.json'), 
                     orient='records', 
@@ -337,16 +335,22 @@ def group_search(song_names, max_posts=100):
 
 def main():
     # ========================================================================================
-    print("===================================================================================")
+    print("\n===================================================================================")
     print("SI 206 W25 Final Project")
-    print("Music trend analysis with Kaggle and Reddit API")
+    print("Music trend analysis with Kaggle and Reddit API -  DATA RETRIEVAL / DATABASE SETUP")
     print("===================================================================================\n")
     # print("--------------------------------------------------------")
     # print("-----------------------------------------------------------------------------------\n")
 
     date = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
+    
+    print("NOTE: Program is designed to run multiple times using a loop to retrieve data from Kaggle and Reddit.\n")
 
-    load_options = '''Dataset loading options:
+    print("-----------------------------------------------------------------------------------")
+    print("Step 1: Load Kaggle dataset and set up database")
+    print("-----------------------------------------------------------------------------------\n")
+
+    load_options = '''Kaggle dataset loading options:
     1: python object
     2: local json file\n'''
     print(load_options)
@@ -354,116 +358,108 @@ def main():
     load_option = input("Please select an option (1 or 2): ")
     print()
 
-    options = '''Options:
-    1. Option 1: Spotify Daily Rank vs. Reddit Mention Frequency
-    2. Option 2: Spotify Popularity vs. Reddit Mention Frequency
-    3. Option 3: Spotify Music's Artist vs. Reddit Mention Frequency
-    4. Option 4: Explit Music Reddit Mention. Non-Explicit Music Reddit Mention
-    5. Option 5: ??? Reddit Sentiment ??? (EC using additional API, e.g. TextBlob)
-    6. Option 6: ???
-    7. Exit\n'''
+    country1 = input("First country to search for: ")
+    country2 = input("Second country to search for: ")
+
+    criteria = {
+        "country": country1,
+        "snapshot_date": date
+    }
+    c1_json_object = load_kaggle_dataset(criteria, load_option)
+
+    criteria = {
+        "country": country2,
+        "snapshot_date": date
+    }
+    c2_json_object = load_kaggle_dataset(criteria, load_option)
+
+    # Groups up the US and CA JSON data to pass into create_update_kaggle_db()
+    json_object = c1_json_object + c2_json_object
+
+    # Sets up the database
+    cur, conn = setup_db("final.db")
+
+    # Updates tables associated with Kaggle with the JSON data at most 25 items each time
+    for count in range(25, 101, 25):
+        proceed = input("Enter [o] to update database (Kaggle): ")
+        if proceed == "o":
+            print(f"Update KaggleData table with 25 items. (Total: {count} items)")
+            cur, conn = create_update_kaggle_db(cur, conn, json_object)
+
     
-    print(options)
+    print("\n-----------------------------------------------------------------------------------")
+    print("Step 2: Search Reddit posts and update database")
+    print("-----------------------------------------------------------------------------------\n")
 
-    option = 0
+    print("Searching Reddit Posts...\n")
+    song_post_dict = search_reddit_posts(cur) #fetched post data
 
-    while option != "7":
-        # get user input
-        option = input("Please select an option (1-7): ")
-        print()
+    print("Program is designed to run multiple times using a loop to retrieve data from Kaggle and Reddit.")
+    print("\t[o]: to start updating database.")
+    print("\t[x]: to stop database updates and exit the program.")
 
-        if option == "1":
-            print("Option 1: Top Charts \n")
-            # keyword = input("Keyword/phrase to search for: ")
-            criteria = {
-                "country": "US",
-                "snapshot_date": date
-            }
-            us_json_object = load_kaggle_dataset(criteria, load_option)
-            criteria = {
-                "country": "CA",
-                "snapshot_date": date
-            }
-            ca_json_object = load_kaggle_dataset(criteria, load_option)
+    option = ""
+    count = 1
+    while option != "x":
+        option = input("[o] update / [x] stop: ")
+        if option == "o":
+            cur, conn = create_update_reddit_db(cur, conn, song_post_dict)
+            print(f"Updated Reddit table {count} times. Check Reddit table each time.")
+            count += 1
+        if option == "x":
+            print("Ending Reddit database updates\n")
 
-            # Groups up the US and CA JSON data to pass into create_update_kaggle_db()
-            json_object = us_json_object + ca_json_object
+    conn.close()
 
-            # Sets up the database and updates each table with the JSON data at most 25 items each time
-            cur, conn = setup_db("final.db")
-            print("Create and update Kaggle table with 25 items")
-            cur, conn = create_update_kaggle_db(cur, conn, json_object)
-            option = input("Enter anything to load more items to the Kaggle table ")
-            cur, conn = create_update_kaggle_db(cur, conn, json_object)
-            print("\nCheck now there are 50 items in the Kaggle DB")
-            option = input("Enter anything to load more items to the Kaggle table ")
-            cur, conn = create_update_kaggle_db(cur, conn, json_object)
-            print("\nCheck now there are 75 items in the Kaggle DB")
-            option = input("Enter anything to load more items to the Kaggle table ")
-            cur, conn = create_update_kaggle_db(cur, conn, json_object)
-            print("\nCheck now there are 100 items in the Kaggle DB")
+        
+    '''
+    main() IMPLEMENTATION WITHOUT LOOPS
 
-            song_post_dict = search_reddit_posts(cur) #fetched post data
+    print("-----------------------------------------------------------------------------------")
+    print("Step 1: Load Kaggle dataset and set up database")
+    print("-----------------------------------------------------------------------------------\n")
 
-            # Since the count of Reddit posts retrieved is not known in advance, 
-            # manually check the table to confirm if the data update is complete (~173 rows)
-            while(option != "exit"): 
-                cur, conn = create_update_reddit_db(cur, conn, song_post_dict) #Reddit DB update 
-                option = input("Enter anything to load more items to the Reddit table, Check Reddit table each time ")
+    load_options = "Kaggle dataset loading options:\n1: python object\n2: local json file\n"
+    print(load_options)
 
-            # Count the Reddit posts for each song in FinalProject_visualization.py
-                
-        elif option == "2":
-            print("Option 2: \n")
-        elif option == "3":
-            print("Option 3: \n")
-        elif option == "4":
-            print("Option 4: \n")
-        elif option == "5":
-            print("Option 5: \n")
-        elif option == "6":
-            print("Option 6: All above\n")
-        elif option == "7":
-            print("Exiting the program...\n")
-            return
-        else:
-            print("INVALID OPTION\n")
-            print(options)
+    load_option = input("Please select an option (1 or 2): ")
+    print()
 
-        print("-----------------------------------------------------------------------------------\n")
+    country1 = input("First country to search for: ")
+    country2 = input("Second country to search for: ")
 
+    criteria = {
+        "country": country1,
+        "snapshot_date": date
+    }
+    c1_json_object = load_kaggle_dataset(criteria, load_option)
+
+    criteria = {
+        "country": country2,
+        "snapshot_date": date
+    }
+    c2_json_object = load_kaggle_dataset(criteria, load_option)
+
+    # Groups up the US and CA JSON data to pass into create_update_kaggle_db()
+    json_object = c1_json_object + c2_json_object
+
+    # Sets up the database
+    cur, conn = setup_db("final.db")
+
+    cur, conn = create_update_kaggle_db(cur, conn, json_object)
+
+    print("\n-----------------------------------------------------------------------------------")
+    print("Step 2: Search Reddit posts and update database")
+    print("-----------------------------------------------------------------------------------\n")
+
+    print("Searching Reddit Posts...\n")
+    song_post_dict = search_reddit_posts(cur) #fetched post data
+
+    cur, conn = create_update_reddit_db(cur, conn, song_post_dict)
+
+    conn.close()
+    '''
 
 if __name__ == "__main__":
     main()
 
-
-
-
-
-
-'''
-1. Choose the option 
-2. Get all the data from kaggle and store it into json object
-    - Manipulate data and insert into Kaggle database (25 song each)
-3. Get all the reddit posts related to the option (~100 posts/request - repeat to get whole month's data)
-    - Count all the mentions 
-    - Insert the mention count into the json object 
-4. Insert into Reddit database 25 each time (individual counts of ~25 songs)
-
-Reference:
-Aggregating subreddits: https://www.reddit.com/r/redditdev/comments/uwfrc7/the_rate_limit_of_60_requests_per_minute_might/
-Increased Rate Limits: https://www.reddit.com/r/redditdev/comments/14nbw6g/updated_rate_limits_going_into_effect_over_the/
-    Free API access rates are as follows:
-        - 100 queries per minute per OAuth client id if you are using OAuth authentication
-        - 10 queries per minute if you are not using OAuth authentication
-PRAW Rate limit Headers: https://www.reddit.com/r/redditdev/comments/7muatr/praw_rate_limit_headers/
-
-
-4/18
-- Successfully filtered data from Kaggle (desired column and val in column)
-    - 50 per country
-TODO: Make an option "save only" to run at least four times 
-    - Retrieve Kaggle data (maybe 2 countries?) and save it as json object
-    - Retrieve Reddit data by reading the json object 
-    - Store the data into database
-'''
