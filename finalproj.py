@@ -224,7 +224,8 @@ def create_update_reddit_db(cur, conn, post_dict):
         conn: connection object
         song_post_dict (dict): A dictionary containing song names as keys and lists of Reddit posts as values
     RETURNS:
-        None
+        cur: cursor object
+        conn: connection object
     '''
     cur.execute('''
         CREATE TABLE IF NOT EXISTS Reddit (
@@ -253,7 +254,7 @@ def create_update_reddit_db(cur, conn, post_dict):
     return cur, conn
 
 
-def search_reddit_posts_v1(cur):
+def search_reddit_posts(cur):
     """
     Groups up the song names from the Music table and calls group_search() to search
     Reddit posts containing the song names. Groups 5 songs together per Reddit API 
@@ -263,7 +264,7 @@ def search_reddit_posts_v1(cur):
         cur: cursor object
     RETURNS:
         song_posts (dict): A dictionary where keys are song names and values are lists of Reddit posts
-        containing those song names. Each key-value pair is returned from group_search().
+        containing those song names in titles or texts. Each key-value pair is returned from group_search().
     """
 
     # {"song_name1": [{post1 data}, {post2 data}, ...], "song_name2": [{post1}, {post2}, ...], ...}
@@ -296,15 +297,15 @@ def search_reddit_posts_v1(cur):
 
 def group_search(song_names, max_posts=100):
     """
-    Searches for the top Reddit posts of the past month containing the group of song names 
-    in the chosen subreddit group. Groups up the subreddit names to increase request efficiency.
+    Searches for the top Reddit posts from the past month mentioning each song name 
+    in the specified list of subreddits. Groups up the subreddit names to increase request efficiency.
 
     ARGUMENTS:
         song_names (list): A list of song names to search for.
         max_posts (int): The maximum number of posts to retrieve.
     RETURNS:
         posts_by_song (dict): A dictionary where keys are song names and values are lists of Reddit posts
-        containing those song names.
+        containing those song names in titles or texts.
     """
     # Group up the subreddits to search in
     subreddit_group = "Music+hiphopheads+popheads+popculturechat"
@@ -402,7 +403,7 @@ def main():
             cur, conn = create_update_kaggle_db(cur, conn, json_object)
             print("\nCheck now there are 100 items in the Kaggle DB")
 
-            song_post_dict = search_reddit_posts_v1(cur) #fetched post data
+            song_post_dict = search_reddit_posts(cur) #fetched post data
 
             # Since the count of Reddit posts retrieved is not known in advance, 
             # manually check the table to confirm if the data update is complete (~173 rows)

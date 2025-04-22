@@ -7,22 +7,7 @@ import csv
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-def setup_db(db_name):
-    '''
-    Sets up and connects to the SQLite database in local directory and returns
-    cursor and connection objects.
-
-    ARGUMENTS:
-        db_name: database filename
-    RETURNS:
-        cur: cursor object
-        conn: connection object
-    '''
-    path = os.path.dirname(os.path.abspath(__file__))
-    conn = sqlite3.connect(path + "/" + db_name)
-    cur = conn.cursor()
-    return cur, conn
+from finalproj import setup_db
 
 def count_reddit_posts(cur):
     '''
@@ -67,11 +52,12 @@ def count_reddit_posts(cur):
 def visualize_spotify_mentions_ordered(cur, filename):
     '''
     Visualizes the Reddit mentions ordered by Spotify daily ranking in a bar chart
-    by reading from the database. On the x-axis, the songs are ordered ascending by their
+    by reading calculated data from a file. On the x-axis, the songs are ordered ascending by their
     daily_rank. 
 
     ARGUMENTS:
         cur: cursor object
+        filename: the name of file to read data from 
     RETURNS:
         None
     '''
@@ -122,12 +108,12 @@ def visualize_spotify_mentions_ordered(cur, filename):
 
 def visualize_top10_reddit_mentions(filename):
     '''
-    Visualizes the top 10 songs by Reddit mentions by reading from the CSV file
+    Visualizes the top 10 songs by Reddit mention counts by reading from the csv file
     that stores the song names and their mention counts with Matplotlib 
     (counts of posts containing the song name).
 
     ARGUMENTS:
-        filename: the name of the CSV file containing song names and mention counts
+        filename: the name of the csv file containing song names and mention counts
     RETURNS:
         None
     '''
@@ -157,7 +143,7 @@ def visualize_top10_reddit_mentions(filename):
 
 def visualize_ranking_us_vs_ca(cur):
     """
-    Visualizes the differences of music rankings between the US and Canada.
+    Visualizes the differences of music rankings between the US and Canada as an overlaid scatter plot. 
 
     ARGUMENTS:
         cur: cursor object
@@ -231,8 +217,8 @@ def visualize_ranking_us_vs_ca(cur):
     
 def visualize_spotify_popularity_vs_reddit_countries(cur):
     '''
-    Visualizes the Spotify popularity v.s. Reddit mentions as a scatterplot
-    by reading from the database. Differentiates by country.
+    Visualizes the Spotify popularity v.s. Reddit mention counts as a scatter plot
+    by reading data from the database. Differentiates by country.
 
     ARGUMENTS:
         cur: cursor object
@@ -279,8 +265,8 @@ def visualize_spotify_popularity_vs_reddit_countries(cur):
 
 def visualize_spotify_popularity_vs_reddit(cur):
     '''
-    Visualizes the Spotify popularity v.s. Reddit mentions as a scatterplot
-    by reading from the database.
+    Visualizes the Spotify popularity v.s. Reddit mention counts as a scatter plot
+    by reading data from the database.
 
     ARGUMENTS:
         cur: cursor object
@@ -315,8 +301,8 @@ def visualize_spotify_popularity_vs_reddit(cur):
 
 def visualize_spotify_ranking_vs_reddit(cur):
     '''
-    Visualizes the Spotify ranking v.s. Reddit mentions as a bar chart
-    by reading from the database.
+    Visualizes the Spotify ranking v.s. Reddit mention counts as a bar chart
+    by reading data from the database.
 
     ARGUMENTS:
         cur: cursor object
