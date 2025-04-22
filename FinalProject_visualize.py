@@ -401,7 +401,7 @@ def main():
             visualize_top10_reddit_mentions(filename)
         elif option == 7:
             print("Everything")
-            visualize_ranking_c1_vs_c2(cur)
+            visualize_ranking_c1_vs_c2_common(cur)
             visualize_spotify_mentions_ordered(cur, filename)
             visualize_spotify_popularity_vs_reddit(cur)
             visualize_spotify_ranking_vs_reddit(cur)
