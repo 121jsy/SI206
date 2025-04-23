@@ -7,7 +7,7 @@ import csv
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from finalproj import setup_db
+from FinalProject_data import setup_db
 
 def count_reddit_posts(cur):
     '''

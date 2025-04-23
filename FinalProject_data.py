@@ -32,7 +32,6 @@ import sqlite3
 import json
 from datetime import datetime, timedelta
 import time
-
 import config
 
 # APIs
@@ -154,7 +153,7 @@ def create_update_kaggle_db(cur, conn, json_object=None):
             FOREIGN KEY (music_id) REFERENCES Music(id)
             UNIQUE (music_id, country_id) 
         )
-    ''') #UNIQUE (music_id, country_id) doesn't allow to insert a row with existing music_id AND country_id -> music_id는 같은데 country_id 다른 경우는 ok
+    ''') #UNIQUE (music_id, country_id) doesn't allow to insert a row with existing music_id AND country_id 
 
     #Create Country Table
     cur.execute('''
@@ -194,9 +193,6 @@ def create_update_kaggle_db(cur, conn, json_object=None):
             else:
                 country_id = row[0]
             
-            # Get the corresponding music_id from the Music table
-            # cur.execute("SELECT id FROM Music WHERE name = ?", (name,))
-            # music_id = cur.fetchone()[0] -->위 코드랑 겹치는 거 같음
             # Insert the rest of the data into the KaggleData table
             daily_rank = music["daily_rank"]
             popularity = music["popularity"]
@@ -274,7 +270,6 @@ def search_reddit_posts(cur):
     total_songs = len(songs)
 
     # Increase the start_index by +grouping_size (5) each time, until it reaches total_songs (100)
-    # 61 songs in Music table
     # Updates the grouped_songs list with 5 songs each time
     for start_index in range(0, total_songs, grouping_size):
         grouped_songs = [] # ["song_name1", "song_name2", ..., "song_name5"]
